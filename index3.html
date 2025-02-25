@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Squid Game Red Light Green Light Hacker Doll</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+      }
+      #ui {
+        position: absolute;
+        bottom: 20px;
+        width: 100%;
+        text-align: center;
+        z-index: 10;
+      }
+      button {
+        padding: 10px 20px;
+        margin: 0 10px;
+        font-size: 16px;
+        cursor: pointer;
+      }
+      #timerDisplay {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        font-size: 24px;
+        color: #ffffff;
+        z-index: 10;
+        font-family: sans-serif;
+      }
+      #gameOver {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 64px;
+        color: red;
+        display: none;
+        animation: flashing 1s infinite;
+        z-index: 10;
+        font-family: sans-serif;
+      }
+      @keyframes flashing {
+        0% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0;
+        }
+        100% {
+          opacity: 1;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Timer and Game Over Display -->
+    <div id="timerDisplay"></div>
+    <div id="gameOver">GAME OVER</div>
+
+    <!-- UI Buttons -->
+    <div id="ui">
+      <button id="startBtn">Start</button>
+      <button id="stopBtn">Stop</button>
+    </div>
+
+    <!-- Include Three.js from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Include GLTFLoader for loading the 3D model -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+
+    <script>
+      let scene, camera, renderer;
+      let doll, mixer;
+      let clock = new THREE.Clock();
+      let timerInterval, gameTimer;
+      let gameRunning = false;
+      let headAnimationTimeout;
+
+      // Audio for the song – replace with your audio file URL
+      const audio = new Audio("https://example.com/red_light_green_light_song.mp3");
+      audio.loop = true;
+      audio.volume = 0.5;
+
+      // Initialize Three.js scene, camera, lights, background, and load the doll model
+      function init() {
+        scene = new THREE.Scene();
+
+        // Set background using a texture from the Squid Game show
+        const textureLoader = new THREE.TextureLoader();
+        textureLoader.load(
+          "https://path_to_squid_game_background.jpg", // Replace with your background URL
+          function (texture) {
+            scene.background = texture;
+          }
+        );
+
+        camera = new THREE.PerspectiveCamera(
+          75,
+          window.innerWidth / window.innerHeight,
+          0.1,
+          1000
+        );
+        camera.position.set(0, 1.6, 3);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Lights
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        directionalLight.position.set(5, 10, 7.5);
+        scene.add(directionalLight);
+
+        // Load the doll glTF model (ensure it has the sunglasses and laptop modifications)
+        const gltfLoader = new THREE.GLTFLoader();
+        gltfLoader.load(
+          "https://example.com/path_to_doll_model.gltf", // Replace with your model URL
+          function (gltf) {
+            doll = gltf.scene;
+            doll.scale.set(1, 1, 1);
+            scene.add(doll);
+
+            // If your model has animations, set up the mixer to play them
+            if (gltf.animations && gltf.animations.length) {
+              mixer = new THREE.AnimationMixer(doll);
+              gltf.animations.forEach((clip) => {
+                mixer.clipAction(clip).play();
+              });
+            }
+          },
+          undefined,
+          function (error) {
+            console.error("Error loading model:", error);
+          }
+        );
+
+        window.addEventListener("resize", onWindowResize, false);
+        animate();
+      }
+
+      // Handle window resizing
+      function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+
+      // Main render loop
+      function animate() {
+        requestAnimationFrame(animate);
+        const delta = clock.getDelta();
+        if (mixer) mixer.update(delta);
+        renderer.render(scene, camera);
+      }
+
+      // Function to perform a random head turn
+      function randomHeadTurn() {
+        if (!gameRunning || !doll) return;
+
+        // Attempt to find the head object (ensure your model's head is named "Head")
+        let head = doll.getObjectByName("Head");
+        if (!head) {
+          // If not found, rotate the entire doll
+          head = doll;
+        }
+
+        // Calculate a random turn angle between 0.2 and 0.7 radians (left or right)
+        let angle = Math.random() * 0.5 + 0.2;
+        if (Math.random() > 0.5) angle = -angle;
+
+        const duration = 500; // animation duration in ms
+        const startRotation = head.rotation.y;
+        const targetRotation = startRotation + angle;
+        const startTime = performance.now();
+
+        function animateTurn(now) {
+          let elapsed = now - startTime;
+          let t = elapsed / duration;
+          if (t > 1) t = 1;
+          head.rotation.y = startRotation + (targetRotation - startRotation) * t;
+          if (t < 1) {
+            requestAnimationFrame(animateTurn);
+          } else {
+            // Schedule the next head turn randomly between 1 to 3 seconds later
+            headAnimationTimeout = setTimeout(
+              randomHeadTurn,
+              Math.random() * 2000 + 1000
+            );
+          }
+        }
+        requestAnimationFrame(animateTurn);
+      }
+
+      // Start the game with a countdown timer (in minutes)
+      function startGame(minutes) {
+        gameRunning = true;
+        gameTimer = minutes * 60;
+        document.getElementById("gameOver").style.display = "none";
+        updateTimerDisplay();
+
+        // Start the countdown timer
+        timerInterval = setInterval(() => {
+          if (gameTimer > 0) {
+            gameTimer--;
+            updateTimerDisplay();
+          } else {
+            endGame();
+            showGameOver();
+          }
+        }, 1000);
+
+        // Start the audio song
+        audio.play();
+
+        // Begin the random head-turn animations
+        randomHeadTurn();
+      }
+
+      // Update the timer display (MM:SS)
+      function updateTimerDisplay() {
+        const minutes = Math.floor(gameTimer / 60);
+        const seconds = gameTimer % 60;
+        document.getElementById("timerDisplay").innerText =
+          String(minutes).padStart(2, "0") +
+          ":" +
+          String(seconds).padStart(2, "0");
+      }
+
+      // End the game by stopping timers and audio
+      function endGame() {
+        gameRunning = false;
+        clearInterval(timerInterval);
+        clearTimeout(headAnimationTimeout);
+        audio.pause();
+        audio.currentTime = 0;
+      }
+
+      // Display "GAME OVER" with a flashing animation
+      function showGameOver() {
+        document.getElementById("gameOver").style.display = "block";
+      }
+
+      // UI event listeners
+      document.getElementById("startBtn").addEventListener("click", () => {
+        if (gameRunning) return;
+        const input = prompt("Enter timer in minutes:", "1");
+        const minutes = parseFloat(input);
+        if (isNaN(minutes) || minutes <= 0) {
+          alert("Please enter a valid positive number.");
+          return;
+        }
+        startGame(minutes);
+      });
+
+      document.getElementById("stopBtn").addEventListener("click", () => {
+        if (gameRunning) {
+          endGame();
+          showGameOver();
+        }
+      });
+
+      // Initialize the scene
+      init();
+    </script>
+  </body>
+</html>

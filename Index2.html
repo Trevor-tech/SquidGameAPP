@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Red Light Green Light - Hacker Girl</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+    }
+    /* Three.js will handle the background image */
+    #timer {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      font-size: 24px;
+      color: white;
+      text-shadow: 1px 1px 2px black;
+      z-index: 10;
+    }
+    #gameOver, #gameSuccess {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 48px;
+      text-shadow: 2px 2px 4px black;
+      display: none;
+      z-index: 10;
+    }
+    #gameOver { color: red; }
+    #gameSuccess { color: green; }
+    .flash {
+      animation: flash 1s infinite;
+    }
+    @keyframes flash {
+      0% { opacity: 1; }
+      50% { opacity: 0; }
+      100% { opacity: 1; }
+    }
+    #startButton, #stopButton {
+      position: absolute;
+      bottom: 10px;
+      font-size: 20px;
+      padding: 10px 20px;
+      cursor: pointer;
+      z-index: 10;
+    }
+    #startButton { left: 10px; }
+    #stopButton { right: 10px; display: none; }
+    /* Countdown display style */
+    #countdownDisplay {
+      display: none;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 72px;
+      color: white;
+      z-index: 20;
+      text-shadow: 3px 3px 6px black;
+    }
+  </style>
+</head>
+<body>
+  <div id="timer">Time left: 0:00</div>
+  <div id="gameOver">Game Over</div>
+  <div id="gameSuccess">You Survived!</div>
+  <div id="countdownDisplay"></div>
+  <button id="startButton">Start</button>
+  <button id="stopButton">Stop</button>
+
+  <!-- Audio elements -->
+  <audio id="redAudio" src="redlight.mp3"></audio>
+  <audio id="greenAudio" src="greenlight.mp3"></audio>
+  <audio id="footstepAudio" src="footsteps.mp3" loop></audio>
+  <audio id="countdownAudio" src="countdown.mp3"></audio>
+
+  <!-- Three.js and GLTFLoader -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>
+
+  <script>
+    // ----- Scene, Camera, Renderer Setup -----
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(
+      75, window.innerWidth / window.innerHeight, 0.1, 1000
+    );
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor(0x000000, 0);
+    document.body.appendChild(renderer.domElement);
+
+    // Load the background texture.
+    const textureLoader = new THREE.TextureLoader();
+    textureLoader.load(
+      'background.jpg',
+      (texture) => { scene.background = texture; },
+      undefined,
+      (err) => { console.error("Error loading background image:", err); }
+    );
+
+    // ----- Lights -----
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    scene.add(ambientLight);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    directionalLight.position.set(0, 1, 1);
+    scene.add(directionalLight);
+
+    // ----- Load 3D Model and Create Pivot -----
+    let dollPivot = new THREE.Group(); // Pivot for rotation
+    scene.add(dollPivot);
+
+    const loader = new THREE.GLTFLoader();
+    loader.load(
+      './squid_game_doll.glb',  // Update path as needed
+      (gltf) => {
+        let dollModel = gltf.scene;
+        // Optional: adjust scale before centering.
+        dollModel.scale.set(0.25, 0.25, 0.25);
+        
+        // Compute bounding box to center pivot.
+        let box = new THREE.Box3().setFromObject(dollModel);
+        let center = new THREE.Vector3();
+        box.getCenter(center);
+        // Reposition model so its center is at (0,0,0) of the pivot.
+        dollModel.position.sub(center);
+        
+        // Add the centered doll model to the pivot.
+        dollPivot.add(dollModel);
+        // Now position the pivot where you want the doll to appear.
+        dollPivot.position.set(0, 0.5, 1);
+      },
+      undefined,
+      (error) => { console.error("Error loading model:", error); }
+    );
+
+    camera.position.set(0, 2, 4.5);
+    camera.lookAt(0, 1, 1);
+
+    // ----- Game State & Variables -----
+    let remainingSeconds = 0;
+    let gameInterval;
+    let gameRunning = false;
+    let headTurnTimeout = null; // For scheduling state toggles
+    let currentState = null;    // "red" or "green"
+    const startButton = document.getElementById('startButton');
+    const stopButton = document.getElementById('stopButton');
+    const timerDisplay = document.getElementById('timer');
+    const gameOverDisplay = document.getElementById('gameOver');
+    const gameSuccessDisplay = document.getElementById('gameSuccess');
+    const countdownDisplay = document.getElementById('countdownDisplay');
+    const redAudio = document.getElementById('redAudio');
+    const greenAudio = document.getElementById('greenAudio');
+    const footstepAudio = document.getElementById('footstepAudio');
+    const countdownAudio = document.getElementById('countdownAudio');
+
+    // For smooth rotation (in radians)
+    let targetRotation = 0;
+    let currentRotation = 0;
+
+    // ----- State Management -----
+    function setState(newState) {
+      currentState = newState;
+      if (newState === "red") {
+        targetRotation = 0; // Pivot rotates so doll faces you.
+        if (!footstepAudio.paused) {
+          footstepAudio.pause();
+          footstepAudio.currentTime = 0;
+        }
+        if (!greenAudio.paused) {
+          greenAudio.pause();
+          greenAudio.currentTime = 0;
+        }
+        redAudio.currentTime = 0;
+        redAudio.play().catch(e => console.error("Error playing red audio:", e));
+      } else if (newState === "green") {
+        targetRotation = Math.PI; // Pivot rotates so doll faces away.
+        if (!redAudio.paused) {
+          redAudio.pause();
+          redAudio.currentTime = 0;
+        }
+        greenAudio.currentTime = 0;
+        greenAudio.play().then(() => {
+          greenAudio.onended = () => {
+            if (currentState === "green") {
+              footstepAudio.currentTime = 0;
+              footstepAudio.play().catch(e => console.error("Error playing footstep audio:", e));
+            }
+          };
+        }).catch(e => console.error("Error playing green audio:", e));
+      }
+    }
+
+    function setInitialState() {
+      const initial = "green"; // Start with green, for example.
+      setState(initial);
+    }
+
+    // ----- Animation Loop -----
+    function animate() {
+      requestAnimationFrame(animate);
+      // Rotate the pivot smoothly.
+      currentRotation += (targetRotation - currentRotation) * 0.1;
+      dollPivot.rotation.y = currentRotation;
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // ----- Schedule State Toggle -----
+    function scheduleHeadTurn() {
+      if (!gameRunning) return;
+      const delay = Math.random() * 3000 + 3000; // 3 to 6 seconds.
+      headTurnTimeout = setTimeout(() => {
+        const newState = (currentState === "red") ? "green" : "red";
+        setState(newState);
+        scheduleHeadTurn();
+      }, delay);
+    }
+
+    // ----- Countdown Logic -----
+    function startCountdown() {
+      countdownDisplay.style.display = 'block';
+      let count = 6;
+      countdownDisplay.textContent = count;
+      countdownAudio.currentTime = 0;
+      countdownAudio.play().catch(e => console.error("Error playing countdown audio:", e));
+      const countdownInterval = setInterval(() => {
+        count--;
+        if (count > 0) {
+          countdownDisplay.textContent = count;
+        } else {
+          clearInterval(countdownInterval);
+          countdownDisplay.style.display = 'none';
+          startGame();
+        }
+      }, 1000);
+    }
+
+    // ----- Timer & Game Logic -----
+    startButton.addEventListener('click', () => {
+      const minutes = prompt("Enter timer in minutes:");
+      if (minutes && !isNaN(minutes) && minutes > 0) {
+        remainingSeconds = Math.floor(minutes * 60);
+        updateTimerDisplay();
+        startCountdown();
+      } else {
+        alert("Please enter a valid number of minutes.");
+      }
+    });
+
+    stopButton.addEventListener('click', successfulEndGame);
+
+    function startGame() {
+      gameRunning = true;
+      startButton.style.display = 'none';
+      stopButton.style.display = 'block';
+      gameOverDisplay.style.display = 'none';
+      gameOverDisplay.classList.remove('flash');
+      gameSuccessDisplay.style.display = 'none';
+      gameSuccessDisplay.classList.remove('flash');
+      
+      gameInterval = setInterval(() => {
+        remainingSeconds--;
+        updateTimerDisplay();
+        if (remainingSeconds <= 0) {
+          endGame();
+        }
+      }, 1000);
+      
+      setInitialState();
+      scheduleHeadTurn();
+    }
+
+    function endGame() {
+      clearInterval(gameInterval);
+      clearTimeout(headTurnTimeout);
+      gameRunning = false;
+      gameOverDisplay.style.display = 'block';
+      gameOverDisplay.classList.add('flash');
+      startButton.style.display = 'block';
+      stopButton.style.display = 'none';
+      setState("red");
+    }
+
+    function successfulEndGame() {
+      clearInterval(gameInterval);
+      clearTimeout(headTurnTimeout);
+      gameRunning = false;
+      gameSuccessDisplay.style.display = 'block';
+      gameSuccessDisplay.classList.add('flash');
+      startButton.style.display = 'block';
+      stopButton.style.display = 'none';
+      setState("red");
+    }
+
+    function updateTimerDisplay() {
+      const minutes = Math.floor(remainingSeconds / 60);
+      const seconds = remainingSeconds % 60;
+      timerDisplay.textContent = `Time left: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+    }
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>

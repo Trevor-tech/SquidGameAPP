@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Squid Game Hacker Edition</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #ui { position: fixed; bottom: 20px; width: 100%; text-align: center; }
+        button { padding: 10px 20px; font-size: 18px; }
+        #timer { 
+            font-size: 40px; 
+            color: red;
+            position: fixed;
+            top: 20px;
+            width: 100%;
+            text-align: center;
+            font-family: Arial;
+        }
+        .game-over {
+            animation: flash 0.5s infinite;
+            font-size: 60px;
+            color: red;
+        }
+        @keyframes flash {
+            0% { opacity: 1; }
+            50% { opacity: 0; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div id="timer">00:00</div>
+    <div id="ui">
+        <input type="number" id="minutes" placeholder="Minutes" min="1" value="1">
+        <button id="startBtn">Start</button>
+        <button id="stopBtn">Stop</button>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.7.1/gsap.min.js"></script>
+    <script>
+        let scene, camera, renderer, girl, mixer, clock, gameActive = false;
+        let timerId, currentTime, startTime;
+
+        init();
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            // Background
+            const textureLoader = new THREE.TextureLoader();
+            textureLoader.load('https://i.imgur.com/5V5QW6j.jpg', (texture) => {
+                scene.background = texture;
+            });
+
+            // Girl character (simplified)
+            const geometry = new THREE.BoxGeometry(2, 5, 1);
+            const material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            girl = new THREE.Mesh(geometry, material);
+            scene.add(girl);
+
+            // Sunglasses
+            const sunglasses = new THREE.Mesh(
+                new THREE.BoxGeometry(1.5, 0.2, 0.5),
+                new THREE.MeshBasicMaterial({ color: 0x000000 })
+            );
+            sunglasses.position.set(0, 0.5, 0.5);
+            girl.add(sunglasses);
+
+            // Laptop
+            const laptop = new THREE.Mesh(
+                new THREE.BoxGeometry(1.5, 0.1, 1),
+                new THREE.MeshBasicMaterial({ color: 0x333333 })
+            );
+            laptop.position.set(1, -1, 0);
+            girl.add(laptop);
+
+            camera.position.z = 10;
+
+            // Event listeners
+            document.getElementById('startBtn').addEventListener('click', startGame);
+            document.getElementById('stopBtn').addEventListener('click', stopGame);
+            animate();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+
+        function startGame() {
+            if (gameActive) return;
+            gameActive = true;
+            const minutes = parseInt(document.getElementById('minutes').value);
+            currentTime = minutes * 60;
+            updateTimerDisplay();
+            
+            startTime = Date.now();
+            timerId = setInterval(() => {
+                currentTime = Math.max(0, (minutes * 60) - Math.floor((Date.now() - startTime)/1000));
+                updateTimerDisplay();
+                if (currentTime <= 0) endGame();
+            }, 1000);
+
+            // Random head turns
+            setInterval(() => {
+                if (!gameActive) return;
+                const targetRotation = Math.random() > 0.5 ? Math.PI : 0;
+                gsap.to(girl.rotation, {
+                    y: targetRotation,
+                    duration: 0.5,
+                    onComplete: () => {
+                        // Add game logic checks here
+                    }
+                });
+            }, 2000);
+        }
+
+        function stopGame() {
+            gameActive = false;
+            clearInterval(timerId);
+        }
+
+        function endGame() {
+            stopGame();
+            const gameOver = document.createElement('div');
+            gameOver.className = 'game-over';
+            gameOver.textContent = 'GAME OVER';
+            document.body.appendChild(gameOver);
+        }
+
+        function updateTimerDisplay() {
+            const minutes = Math.floor(currentTime / 60);
+            const seconds = currentTime % 60;
+            document.getElementById('timer').textContent = 
+                `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
