@@ -39,7 +39,7 @@
       50% { opacity: 0; }
       100% { opacity: 1; }
     }
-    #startButton, #stopButton {
+    #startButton, #endButton {
       position: absolute;
       bottom: 10px;
       font-size: 20px;
@@ -48,7 +48,8 @@
       z-index: 10;
     }
     #startButton { left: 10px; }
-    #stopButton { right: 10px; display: none; }
+    /*#stopButton { right: 10px; display: none; }*/
+    #endButton { right: 10px; display: none; }
     /* Countdown display style */
     #countdownDisplay {
       display: none;
@@ -69,7 +70,8 @@
   <div id="gameSuccess">You Survived!</div>
   <div id="countdownDisplay"></div>
   <button id="startButton">Start</button>
-  <button id="stopButton">Stop</button>
+  <!-- <button id="stopButton"></button> -->
+  <button id="endButton">End</button>
 
   <!-- Audio elements -->
   <audio id="redAudio" src="redlight.mp3"></audio>
@@ -146,7 +148,8 @@
     let headTurnTimeout = null; // For scheduling state toggles
     let currentState = null;    // "red" or "green"
     const startButton = document.getElementById('startButton');
-    const stopButton = document.getElementById('stopButton');
+    // const stopButton = document.getElementById('stopButton');
+    const endButton = document.getElementById('endButton');
     const timerDisplay = document.getElementById('timer');
     const gameOverDisplay = document.getElementById('gameOver');
     const gameSuccessDisplay = document.getElementById('gameSuccess');
@@ -244,44 +247,47 @@
       if (minutes && !isNaN(minutes) && minutes > 0) {
         remainingSeconds = Math.floor(minutes * 60);
         updateTimerDisplay();
+        startButton.style.display = 'none';
+        gameOverDisplay.style.display = 'none';
+        gameOverDisplay.classList.remove('flash');
+        gameSuccessDisplay.style.display = 'none';
+        gameSuccessDisplay.classList.remove('flash');
         startCountdown();
       } else {
         alert("Please enter a valid number of minutes.");
       }
     });
 
-    stopButton.addEventListener('click', successfulEndGame);
+    endButton.addEventListener('click', endGame1);
+    const spaceKey = document.addEventListener('keydown', function(event) {
+            if (!gameRunning) return;
+            console.log(currentState);
+            if (event.code === 'Space') {
+              if (currentState === "red") {
+                setState("green");
+              } else if (currentState === "green") {
+                console.log(currentState);
+                setState("red");  
+                console.log(currentState, "Sucesfully changed to red");
+              }
+            }
+
+        });
 
     function startGame() {
       gameRunning = true;
-      startButton.style.display = 'none';
-      stopButton.style.display = 'block';
-      gameOverDisplay.style.display = 'none';
-      gameOverDisplay.classList.remove('flash');
-      gameSuccessDisplay.style.display = 'none';
-      gameSuccessDisplay.classList.remove('flash');
+      endButton.style.display = 'block';
       
       gameInterval = setInterval(() => {
         remainingSeconds--;
         updateTimerDisplay();
         if (remainingSeconds <= 0) {
-          endGame();
+          endGame1();
         }
       }, 1000);
       
       setInitialState();
       //scheduleHeadTurn();
-      const spaceKey = document.addEventListener('keydown', function(event) {
-            if (!gameRunning) return;
-            if (event.code === 'Space') {
-              if (currentState === "red") {
-                setState("green");
-              } else if (currentState === "green") {
-                setState("red");  
-              }
-            }
-
-        });
     }
 
     function endGame() {
@@ -291,7 +297,7 @@
       gameOverDisplay.style.display = 'block';
       gameOverDisplay.classList.add('flash');
       startButton.style.display = 'block';
-      stopButton.style.display = 'none';
+      endButton.style.display = 'none';
       setState("red");
     }
 
@@ -302,7 +308,24 @@
       gameSuccessDisplay.style.display = 'block';
       gameSuccessDisplay.classList.add('flash');
       startButton.style.display = 'block';
-      stopButton.style.display = 'none';
+      endButton.style.display = 'none';
+      setState("red");
+    }
+
+    function endGame1(){
+      clearInterval(gameInterval);
+      clearTimeout(headTurnTimeout);
+      gameRunning = false;
+      if (remainingSeconds <= 0) {
+        gameOverDisplay.style.display = 'block';
+        gameOverDisplay.classList.add('flash');
+      } 
+      else{
+        gameSuccessDisplay.style.display = 'block';
+        gameSuccessDisplay.classList.add('flash');
+      }
+      startButton.style.display = 'block';
+      endButton.style.display = 'none';
       setState("red");
     }
 
