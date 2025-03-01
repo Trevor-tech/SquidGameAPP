@@ -270,7 +270,18 @@
       }, 1000);
       
       setInitialState();
-      scheduleHeadTurn();
+      //scheduleHeadTurn();
+      const spaceKey = document.addEventListener('keydown', function(event) {
+            if (!gameRunning) return;
+            if (event.code === 'Space') {
+              if (currentState === "red") {
+                setState("green");
+              } else if (currentState === "green") {
+                setState("red");  
+              }
+            }
+
+        });
     }
 
     function endGame() {
